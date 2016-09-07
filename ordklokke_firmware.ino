@@ -38,9 +38,17 @@ const uint8_t brightness = 1;
 rgb_color colors[ledCount];
 rgb_color currentRGB;
 
+const uint8_t SW1 = 8;
+const uint8_t SW2 = 9;
+const uint8_t SW3 = 10;
+
 void setup()
 {
   Serial.begin(57600);
+  pinMode(SW1, INPUT); //TODO: add pulldown resistors
+  pinMode(SW2, INPUT); 
+  pinMode(SW3, INPUT); 
+  
   if (! rtc.begin()) {
     Serial.println("Couldn't find RTC");
     while (1);
@@ -48,11 +56,6 @@ void setup()
 
   if (! rtc.isrunning()) {
     Serial.println("RTC is NOT running!");
-    // following line sets the RTC to the date & time this sketch was compiled
-    // 
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 21, 2014 at 3am you would call:
-    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
   } else {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
@@ -77,6 +80,10 @@ void ledTEST() {
   }
 }
 
+fromto &fromToFromHour(uint8_t hour) {
+  return ett;
+}
+
 void allOff() {
   for(uint16_t i = 0; i < ledCount; i++)
   {
@@ -96,8 +103,26 @@ void light(fromto &segment, rgb_color &color) {
   }
 }
 
+void readInputs() {
+  TimeSpan plusMin(0,0,1,0);
+  TimeSpan minusMin(0,0,-1,0);
+  TimeSpan plusHr(0,1,0,0);
+  TimeSpan minusHr(0,-1,0,0);
+  uint8_t sw1 = digitalRead(SW1) == HIGH;
+  uint8_t sw2 = digitalRead(SW2) == HIGH;
+  uint8_t sw3 = digitalRead(SW3) == HIGH;
+  if (!sw1 && !sw2 && !sw3) return;
+  
+  DateTime now = rtc.now();
+  DateTime adj(now + (sw1 ? 
+    (sw2?plusHr:minusHr) : (sw2?plusMin:minusMin)
+  ));
+  rtc.adjust(adj);
+  delay(30); //stop from spamming so its easier to hit the mark by clicking
+}
 void loop()
 {
+  readInputs();
   allOff();
   currentRGB.red = 255;
   currentRGB.green = 128;
@@ -108,9 +133,36 @@ void loop()
   uint8_t hour = now.hour();
   uint8_t minute = now.minute();
   uint8_t second = now.second();
-  uint8_t minzone = (minute+3) / 5; // we use five min increments
+  uint8_t minzone = ((minute+3)%60) / 5; // we use five min increments
 
-  colors[second].blue = 255;
+  if (minzone <=8 && minzone >=0){
+    light(fromToFromHour(hour), currentRGB); //light current hour
+  } else {
+    light(fromToFromHour(hour+1), currentRGB); //light next hour
+  }
+
+  if ((minzone<=3 && minzone>=1) || (minzone<=8 && minzone>=7)) {
+    light(over, currentRGB);
+  } else if ((minzone<=5 && minzone>=4) || (minzone<=11 && minzone>=9)) {
+    light(paa, currentRGB); //light next hour
+  }
+  
+  if (minzone<=8 && minzone>=4) {
+    light(halv, currentRGB);
+  }
+  
+  if (minzone==1 || minzone==5 || minzone==7 || minzone==11) {
+    light(fem_til, currentRGB);
+  }
+  if (minzone==2 || minzone==4 || minzone==8 || minzone==10) {
+    light(ti_til, currentRGB);
+  }
+  if (minzone==3 || minzone==9) {
+    light(kvart_til, currentRGB);
+  }
+      
+  
+  colors[second + 9].blue = 255; //start at letter on fem
   
   ledStrip.write(colors, ledCount, brightness);
 }
